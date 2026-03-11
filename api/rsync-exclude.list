@@ -1,0 +1,39 @@
+node_modules/
+*.sh
+.env
+
+package-lock.json
+
+// Python Package
+venv/
+
+*.mmdb
+*.pyc
+__pycache__/
+
+instance/
+
+.pytest_cache/
+.coverage
+htmlcov/
+
+dist/
+build/
+*.egg-info/
+
+// Bianary Symlink
+python3
+pip3
+
+// Cache
+__pycache__
+
+.git
+.vscode
+
+*.sh
+src/config/*.ini
+src/credentials/*
+
+// Github Action용 private_key
+private_key
