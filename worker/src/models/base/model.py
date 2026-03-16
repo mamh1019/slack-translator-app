@@ -1,66 +1,47 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import pymysql
-from sqlalchemy import create_engine
+from typing import Any, Dict, List, Optional
 
-## Type Def
-from pymysql.cursors import DictCursor
-from pymysql.connections import Connection
-
-""" pymysql 은 동기식이라 await 필요 없음
-"""
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 
 
 class Model:
-    _conn_db: Connection = None
-    _curs_db: DictCursor = None
+    _engine: Engine = None
 
     def __init__(self, db_setting):
-        """Create RDBMS Connection
-
-        :param env_mysql_section: env.ini database section key
-        """
-        self._conn_db = pymysql.connect(
-            host=db_setting.db_host,
-            user=db_setting.db_user,
-            password=db_setting.db_pass,
-            db=db_setting.db_name,
-            charset="utf8",
-        )
-        self._curs_db = self._conn_db.cursor(pymysql.cursors.DictCursor)
-        self._insert_db = create_engine(
-            f"mysql+pymysql://{db_setting.db_user}:{db_setting.db_pass}@{db_setting.db_host}/{db_setting.db_name}"
+        """Create RDBMS Connection via SQLAlchemy Engine"""
+        self._engine = create_engine(
+            f"mysql+pymysql://{db_setting.db_user}:{db_setting.db_pass}@{db_setting.db_host}/{db_setting.db_name}",
+            pool_pre_ping=True,
+            pool_recycle=3600,
+            future=True,
         )
 
-    def __del__(self):
-        if self._conn_db:
-            self._curs_db.close()
-            self._conn_db.close()
-
     @property
-    def conn_db(self) -> Connection:
-        return self._conn_db
+    def engine(self) -> Engine:
+        return self._engine
 
-    @property
-    def curs_db(self) -> DictCursor:
-        return self._curs_db
-
-    def insert_all(self, sql: str, params: list) -> bool:
-        """Base Query"""
-        if len(params) <= 0:
+    def insert_all(self, sql: str, params: List[Dict[str, Any]]) -> None:
+        """Base Query - bulk insert"""
+        if not params:
             return
-        self._curs_db.executemany(sql, params)
-        return self._conn_db.commit()
+        with self._engine.begin() as conn:
+            conn.execute(text(sql), params)
 
-    def commit(self, sql):
-        self._curs_db.execute(sql)
-        return self._conn_db.commit()
+    def commit(self, sql: str, params: Optional[Dict[str, Any]] = None) -> None:
+        """Execute write query with transaction"""
+        with self._engine.begin() as conn:
+            conn.execute(text(sql), params or {})
 
-    def fetchall(self, sql) -> list:
-        self._curs_db.execute(sql)
-        return self._curs_db.fetchall()
+    def fetchall(self, sql: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        with self._engine.connect() as conn:
+            result = conn.execute(text(sql), params or {})
+            return [dict(row) for row in result.mappings().all()]
 
-    def fetchone(self, sql) -> dict:
-        self._curs_db.execute(sql)
-        return self._curs_db.fetchone()
+    def fetchone(self, sql: str, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        with self._engine.connect() as conn:
+            result = conn.execute(text(sql), params or {})
+            row = result.mappings().first()
+            return dict(row) if row is not None else None
